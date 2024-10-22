@@ -1,363 +1,445 @@
-# UNIX-TP2
+# UNIX-TP3
 
-Deuxieme TP en cours d'UNIX
+Troisième TP en cours d'UNIX
 
-# 1 - Secure Shell : SSH
+## Paramètres
 
-## 1.1 Exercice : connexion ssh root
+### Script :
 
-Dans `sshd_config`, l'élément à configurer est PermitRootLogin
+```
+#!/bin/bash
 
-Les différentes options sont : 
+echo "Bonjour, vous rentré $# paramètres"
 
-> no
+echo "Le nom du script est $0"
 
-Les connexions SSH pour l'utilisateur root sont complètement interdites
+if [ $# -ge 3 ]; then
+  echo "Le 3eme paramètre est $3"
+else
+  echo "Le 3eme paramètre n'a pas été fourni"
+fi
 
-Avantages :
+echo "Voici la liste des paramètres : $@"
+```
 
-- améliorer la sécurité en empechant les attaques par force brute sur le compte root
-- permettre d'utiliser des comptes non privilégiés, ce qui est une bonne pratique de sécurité
+### Resultat :
 
-Inconvénients :
+```
+root@serveur1:~# ./analyse.sh youpi haha yo
+Bonjour, vous rentré 3 paramètres
+Le nom du script est ./analyse.sh
+Le 3eme paramètre est yo
+Voici la liste des paramètres : youpi haha yo
+```
 
-- nécessite une connexion via un autre utilisateur, ce qui peut ajouter des étapes supplémentaires pour les admin qui doivent exécuter des commandes root.
+## Vérification du nombre de paramètres
 
-Utilisation : Utilisé dans les environnements de production pour réduire le risque d'accès non autorisé
+### Script :
 
-> yes
+```
+#!/bin/bash
 
-Les connexions ssh root sont autorisées avec un mot de passe
+if [ $# -ne 2 ]; then
+  echo "Erreur : vous devez rentrer exactement 2 paramèt>
+  exit 1
+fi
 
-Avantages :
+CONCAT="$1$2"
 
-Pratique pour l'administration à distance, car les admin peuvent se connecter directement en tant que root
+echo "Le résultat de la concatenation est : $CONCAT"
+```
 
-Inconvénients :
+### Resultat :
 
-- augmente le risque de piratage, un attaquant peut essayer de deviner le mot de passe root
-- expose le système à des attaques par force brute
+```
+root@serveur1:~# ./concat.sh
+Erreur : vous devez rentrer exactement 2 paramètres
+root@serveur1:~# ./concat.sh hello hello
+Le résultat de la concatenation est : hellohello
+```
 
-Utilisation : Utilisé dans des environnements de test ou de développement où l'accès rapide à root est nécessaire, mais pas recommandé en production
+Le message d'erreur fonctionne correctement
 
-> prohibit-password
+## Argument type et droits
 
-Les connexions ssh root sont interdites via un mot de passe, mais autorisées avec des clefs ssh
+### Script : 
 
-Avantages :
+```
+#!/bin/bash
 
-- permet un accès sécurisé via des clefs, réduit donc le risque d'infiltration tout en étant flexible via l'authentification avec clefs
+if [ $# -ne 1 ]; then
+  echo "Erreur : Vous devez fournir un fichier ou un répertoire"
+  exit 1
+fi
 
-Inconvénients :
+FILE=$1
 
-- nécessite la gestion des clefs ssh, ce qui peut être compliqué pour certains utilisateurs
+if [ ! -e "$FILE" ]; then
+  echo "Le fichier \"$FILE\" n'existe pas"
+  exit 1
+fi
 
-Utilisation : Recommandé pour les environnements de production où la sécurité est primordiale, mais où un accès root est nécessaire
+if [ -d "$FILE" ]; then
+  echo "Le fichier \"$FILE\" est un répertoire"
+elif [ -f "$FILE" ]; then
+  if [ -s "$FILE" ]; then
+    echo "Le fichier \"$FILE\" est un fichier ordinaire qui n’est pas vide"
+  else
+    echo "Le fichier \"$FILE\" est un fichier ordinaire vide"
+  fi
+else
+  echo "Le fichier \"$FILE\" est d’un autre type"
+fi
 
-## 1.2 Exercice : authentification par clef / génération de clefs
+USER=$(whoami)
 
+echo -n "\"$FILE\" est accessible par $USER "
 
-### Génération des clefs publique et privée
+if [ -r "$FILE" ]; then
+  echo -n "en lecture"
+fi
 
->> ssh-keygen 
+if [ -w "$FILE" ]; then
+  echo -n "en écriture "
+fi
 
-Les clefs ont bien été créee :
+if [ -x "$FILE" ]; then
+  echo -n "en execution"
+fi
 
-Emplacement de la clef privée :
+echo
+```
 
-Your identification has been saved in /Users/rayan/.ssh/id_ed25519
-Your public key has been saved in /Users/rayan/.ssh/id_ed25519.pub
+### Resultat :
 
-## 1.3 Exercice : authentification par clef / génération de clefs
+```
+root@serveur1:~# ./test-fichier.sh date.sh
+Le fichier "date.sh" est un fichier ordinaire qui n’est pas vide
+"date.sh" est accessible par root en lectureen écriture en execution
+root@serveur1:~# ./test-fichier.sh hello.sh
+Le fichier "hello.sh" n'existe pas
+root@serveur1:~# ./test-fichier.sh lelo
+Le fichier "lelo" n'existe pas
+```
 
-### Copie de la clef publique sur le serveur distant
+## Afficher le contenu d'un repertoire
 
->> ssh-copy-id root@172.16.233.130
+### Script :
 
-/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/Users/rayan/.ssh/id_ed25519.pub"
-/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
-/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
-root@172.16.233.130's password: 
+```
+#!/bin/bash
 
-Number of key(s) added:        1
+if [ $# -ne 1 ]; then
+  echo "Erreur : Vous devez fournir un repertoire en paramètre"
+  exit 1
+fi
 
-Now try logging into the machine, with:   "ssh 'root@172.16.233.130'"
-and check to make sure that only the key(s) you wanted were added.
+DIR=$1
 
-Après la saisie du mot de passe, la clef a bien été transferée dans /root/.ssh/authorized_keys sur le serveur distant
+if [ ! -d "$DIR" ]; then
+  echo "Le repertoire \"$DIR\" n'existe pas ou n'est pas un répertoire"
+  exit 1
+fi
 
-Desormais, je suis le seul (ordinateur) à pouvoir me connecter au serveur, étant le seul à détenir la clef privée
-
-Lors de la tentative de connexion, ssh recherche et essaie toutes les clefs présentes sur la machine locale :
-
-
-debug1: Offering public key: /Users/rayan/.ssh/id_ed25519 ED25519 SHA256:Zk1jY8AoCwjdlBeKw30lkRpFSH0EDeC7M27ZqgjrR1I
-debug1: Server accepts key: /Users/rayan/.ssh/id_ed25519 ED25519 SHA256:Zk1jY8AoCwjdlBeKw30lkRpFSH0EDeC7M27ZqgjrR1I
-Authenticated to 172.16.233.130 ([172.16.233.130]:22) using "publickey".
-
-Ci-dessus, le serveur a accepté la clef correspondante lorsque celle-ci a été envoyée.
-
-
-## 1.4 Exercice : Authentification par clef : depuis la machine hote
-
->> rayan@Host-002 .ssh % ssh -i id_ed25519 root@172.16.233.130
-
-Resultat : connexion reussie 
-
-Preuve dans le changement du nom de Host :
-
->> root@serveur1:~# 
-
-## 1.5 Exercice : Sécurisez
-
-Afin de sécuriser l'accès à la machine root par clef uniquement, il faut changer les autorisations dans sshd_config et donc modifier les lignes suivantes :
-
->> PermitRootLogin prohibit-password
->> PasswordAuthentication no
-
-Les attaques brute force ssh consistent à essayer de deviner le mot de passe d'un utilisateur en testant des milliers de combinaisons de mots de passe de manière automatique (souvent en utilisant des dictionnaires et des programmes tels que JohnTheRipper)
-
-### Autres techniques de protection
-
-> Fail2ban : surveille les tentatives de connexion ssh dans les logs et bloque les adresses IP après plusieurs tentatives échouées
-
-Avantage : facile à configurer et efficace pour bloquer temporairement les attaques répétées
-
-Inconvénient : ne protège pas contre des attaques distribuées venant de différents ip
-
-> Changer le port par défaut (22) : modifier le port ssh par defaut pour réduire la visibilité du serveur aux scans automatisés
-
-Avantage : reduit les tentatives d'attaque automatiques
-
-Inconvénient : ne protège pas contre des attaques ciblées
-
-# 2 - Processus
-
-## 2.1 Exercice : Etude des processus UNIX
-
-### 1
-
->> ps -eo user,pid,%cpu,%mem,stat,lstart,time,command
-
-TIME correspond au temps CPU cumulé utilisé par le processus. C'est le temps total pendant lequel le processeur a été occupé à exécuter ce processus
-
-Processus ayant utilisé le plus le processeur : 640 _windowserver      9,5  0,6 Ss   Sam 21 sep 15:35:11 2024     812:03.92
-
-Premier processus lancé après le démarrage du système : 948 Sam 21 sep 15:35:29 2024     /System/Library/CoreServices/SubmitDiagInfo server-init
-
-
-Ma machine a démarrée le 21 septembre à 15:33 :
-
->> who -b
->> system boot  21 sep 15:33 
-
-Autre commande pour trouver le temps depuis lequel le serveur tourne : 
-
->> uptime
->> 00:52:42 up 2 min,  2 users
-
-Nombre approximatif de processus crées depuis le démarrage de la machine : 
-
->> ps aux | wc -l
-
-Resultat : 715
-
-### 2
-
-Afficher tous les PPIDs :
-
->> ps -eo pid,ppid,comm   
-
-Resultat pour ps :
-
-23544 21597 ps
-
->> ps -o pid,ppid,comm -p 21597
-
-Resultat :
-
-  PID  PPID COMM
-21597 21596 -zsh
-
-
-Même chose avec pstree : 
-
->> pstree -p 21597
--+= 00001 root /sbin/launchd
- \-+= 19365 rayan /System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal
-   \-+= 21596 root login -pf rayan
-     \-+= 21597 rayan -zsh
-       \-+= 23560 rayan pstree -p 21597
-         \--- 23561 root ps -axwwo user,pid,ppid,pgid,command
-
-### 4
-
-Affichage des processus les plus gourmands classés par resident memory (RES) :
-
->> top -o RES
-
-Resultat :
-
-612 root      20   0  400708  24228  10620 S   0.0   1.2   0:00.29 fail2ban-server    
-
-
-fail2ban-server est le processus le plus gourmand
-
-Changement de couleur : touche Z pendant que top est lancé -> selection de la couleur
-
-
-Changer la colonne de trie : Shift + (colonne que l'on souhaite mettre en avant)
-
->> htop
-
-Avantages : c'est beaucoup plus jolie ! Il est plus intuitif que top. Commandes pour kill des processus
-
-Inconvenients : plus gourmand que top
-
-# 3 - Arret d'un processus
-
-
-Création des deux scripts dans leurs fichiers respectifs :
-
->> nano date.sh 
-
-!/bin/sh
-while true; do 
-    sleep 1
-    echo -n 'date '
-    date +%T
+echo "####### fichiers dans $DIR/"
+for file in "$DIR"/*; do
+  if [ -f "$file" ]; then
+    echo "$file"
+  fi
 done
 
->> nano date-toto.sh
-
-!/bin/sh
-while true; do 
-    sleep 1
-    echo -n 'toto '
-    date --date '5 hour ago' +%T
+echo "####### repertoires dans $DIR/"
+for dir in "$DIR"/*; do
+  if [ -d "$dir" ]; then
+    echo "$dir"
+  fi
 done
+```
 
-Problème rencontré, les scripts ne se lancent pas :
+### Resultat :
 
->> ./date.sh
->> -bash: ./date.sh: Permission denied
+```
+root@serveur1:~# ./listedir.sh /boot
+####### fichiers dans /boot/
+/boot/config-6.1.0-25-arm64
+/boot/initrd.img
+/boot/initrd.img-6.1.0-25-arm64
+/boot/initrd.img.old
+/boot/System.map-6.1.0-25-arm64
+/boot/vmlinuz
+/boot/vmlinuz-6.1.0-25-arm64
+/boot/vmlinuz.old
+####### répertoires dans /boot/
+/boot/efi
+/boot/grub
+```
 
-Verification des permitions de date.sh :
+## Lister les utilisateurs
 
->> ls -l date.sh
->> -rw-r--r-- 1 root root 76 Oct 14 02:06 date.sh
+### Script :
 
--rw-r--r-- indique que le fichier n'est pas exécutable
+```
+#!/bin/bash
 
-Donner les permitions d'execution avec la commande : 
+for user in $(cut -d':' -f1,3 /etc/passwd); do
+  login=$(echo $user | cut -d':' -f1)
+  uid=$(echo $user | cut -d':' -f2)
+  if [ "$uid" -gt 100 ]; then
+    echo "$login"
+  fi
+done
+```
 
->> chmod +x date.sh
+### Resultat :
 
-Reverification :
+```
+root@serveur1:~# ./listeuser.sh
+nobody
+systemd-network
+systemd-timesync
+sshd
+```
 
->> ls -l date.sh
->> -rwxr-xr-x 1 root root 76 Oct 14 02:06 date.sh
+### Script awk :
 
--rwxr-xr-x indique que le fichier peut bien s'executer, le programme fonctionne bien
+```
+#!/bin/bash
 
-Lancement des scripts : 
+awk -F':' '$3 > 100 {print $1}' /etc/passwd
+```
 
->> ./date.sh
->> ./date-toto.sh
+cut extrait les champs du fichier /etc/passwd (le champ 1 pour les logins et le champ 3 pour les UIDs)
+awk fait la même chose plus simplement, en vérifiant directement si le champ 3 (UID) est supérieur à 100 et en affichant le champ 1 (login)
 
-Arret des processus à l'aide de kill :
+## Mon utilisateur existe t'il
 
-Trouver le PID du script avec :
+### Script :
 
->> ps aux
+```
+#!/bin/bash
 
-root        1374  0.0  0.0   2324   816 pts/0    S+   02:30   0:00 /bin/sh ./date.sh
+if [ $# -ne 2 ]; then
+  echo "Erreur : Vous devez fournir deux paramètres : 'login' ou 'uid' et la valeur correspondante."
+  exit 1
+fi
 
->> kill 1374
+OPTION=$1
+VALUE=$2
 
->> #!/bin/sh : Indique que le script doit être exécuté avec l’interpréteur de commandes sh
->> while true; do ... done : crée une boucle infinie, exécutant le bloc de code entre do et done sans fin
->> sleep 1 : met le script en pause pendant 1 seconde à chaque itération pour éviter une surcharge d'affichage
->> echo -n 'date ' : affiche le texte 'date' sans saut de ligne
->> date --date '5 hour ago' +%T : affiche l'heure qu'il était 5 heures auparavant au format heure:minutes
+if [ "$OPTION" == "login" ]; then
+  UID=$(awk -F':' -v login="$VALUE" '$1 == login {print $3}' /etc/passwd)
+  if [ ! -z "$UID" ]; then
+    echo "L'utilisateur $VALUE a pour UID : $UID"
+  fi
+elif [ "$OPTION" == "uid" ]; then
+  LOGIN=$(awk -F':' -v uid="$VALUE" '$3 == uid {print $1}' /etc/passwd)
+  if [ ! -z "$LOGIN" ]; then
+    echo "L'utilisateur avec l'UID $VALUE est : $LOGIN"
+  fi
+else
+  echo "Erreur : Le premier paramètre doit être 'login' ou 'uid'."
+  exit 1
+fi
+```
 
-# 4 - Les tubes
+### Resultat :
 
-## Différence entre tee et cat
+```
+root@serveur1:~# ./checkuser.sh login root
+L'utilisateur root a pour UID : 0
+```
 
-### cat :
+## Creation utilisateur
 
-Utilisé principalement pour afficher le contenu d'un fichier dans la sortie standard (écran) ou pour concaténer plusieurs fichiers.
-Il ne modifie pas le contenu des données, il les affiche ou les combine.
+### Script :
 
-tee :
+```
+#!/bin/bash
 
-Utilisé pour lire de l'entrée standard, écrire dans un ou plusieurs fichiers, et aussi afficher le contenu à la sortie standard.
-Cela permet de « diviser » la sortie : elle est à la fois affichée et enregistrée dans un fichier.
+if [ "$USER" != "root" ]; then
+  echo "erreur : ce script doit être exécuté en tant que root"
+  exit 1
+fi
 
+read -p "Login : " login
+read -p "Nom : " nom
+read -p "Prénom : " prenom
+read -p "UID : " uid
+read -p "GID : " gid
+read -p "Commentaires : " commentaires
 
-### Explication des commandes
+# vérification si l'utilisateur existe déja
+if [ $(./check_user.sh login "$login") ]; then
+  echo "erreur : l'utilisateur $login existe déja"
+  exit 1
+fi
 
+if [ $(./check_user.sh uid "$uid") ]; then
+  echo "erreur : utilisateur avec l'UID $uid existe déja"
+  exit 1
+fi
 
->> ls | cat
+# vvérification si un répertoire avec le meme nom dans /home existe
+if [ -d "/home/$login" ]; then
+  echo "erreur: le répertoire /home/$login existe déja"
+  exit 1
+fi
 
-Affiche simplement la liste des fichiers sur l'écran, mais l'utilisation de cat ici fais en sorte que les fichiers soient affichés superposés contrairement à ls uniquement
+# creation de l'utilisateur
+useradd -u "$uid" -g "$gid" -c "$nom $prenom, $commentaires" -m -d "/home/$login" "$login"
 
->> ls -l | cat > liste
+if [ $? -eq 0 ]; then
+  echo "l'utilisateur $login a été créé"
+else
+  echo "erreur : impossible de créer l'utilisateur $login"
+fi
+```
 
-Crée le fichier liste avec la liste détaillée des fichiers
+### Resultat :
 
->> ls -l | tee liste
+```
+root@serveur1:~# ./createuser.sh
+Login : ray
+Nom : Rayan
+Prénom : Super
+UID : 99
+GID : 00
+Commentaires : Moi
+./createuser.sh: line 16: ./check_user.sh: No such file or directory
+./createuser.sh: line 21: ./check_user.sh: No such file or directory
+useradd warning: ray's uid 99 outside of the UID_MIN 1000 and UID_MAX 60000 range.
+l'utilisateur ray a été créé
+```
 
-Afficher la liste détaillée des fichiers à l'écran et l'enregistre dans le fichier liste
+L'UID doit se situer entre 1000 et 60000, cependant l'utilisateur a bien été crée
 
->> ls -l | tee liste | wc -l
+### Verification : 
 
-Affiche la liste détaillée des fichiers à l'ecran, l'enregistre dans liste, et affiche le nombre de lignes
+```
+root@serveur1:~# ./checkuser.sh login ray
+L'utilisateur ray a pour UID : 99
+root@serveur1:~# ./checkuser.sh login root
+L'utilisateur root a pour UID : 0
+```
 
-# 5 - Journal système rsyslog
+## Lecture au clavier 
 
-### rsyslog
+```
+Comment quitter more ? -> touche q
 
->> ps aux | grep syslog
+Comment avancer d’une ligne ? -> touche Entrée
 
-Resultat :
+Comment avancer d’une page ? ->  barre d’espace
 
-root         575  0.0  0.1 222128  3832 ?        Ssl  22:04   0:00 /usr/sbin/rsyslogd -n -iNONE
+Comment remonter d’une page ? -> less -> b pour remonter d'une page
 
-rsyslog est bien lancé. Son PID est 575
+Comment chercher une chaîne de caractères ? -> taper / suivi de la chaine à chercher, et Entrée
 
->> /var/log/syslog 
+Comment passer à l’occurrence suivante ? -> appuyer sur n après avoir fait une recherche avec /
+```
 
-C'est le fichier où rsyslog écrit la plupart des messages systeme standards, y compris ceux provenant des services
+### Script :
 
->> /var/log/auth.log 
+```
+#!/bin/bash
 
-Pour les messages liés à l'authentification (connexions ssh, sudo, etc...)
+if [ $# -ne 1 ]; then
+  echo "erreur: vous devez specifier un répertoire en argument"
+  exit 1
+fi
 
-/var/log/kern.log : contient les messages relatifs au noyau (kernel)
-/var/log/dmesg : contient les messages produits pendant le démarrage du système
-/var/log/mail.log : utilisé pour enregistrer les messages relatifs aux services de mails
-/var/log/daemon.log : enregistre les messages provenant des daemons en arrière-plan
+DIR=$1
 
-### cron
+if [ ! -d "$DIR" ]; then
+  echo "erreur : le répertoire spécifié n'existe pas"
+  exit 1
+fi
 
-Le service cron est utilisé pour exécuter des tâches planifiées automatiquement à des intervalles réguliers. Les utilisateurs peuvent définir des commandes ou des scripts à exécuter à des heures spécifiques ou à des périodes récurrentes, comme tous les jours ou chaque semaine.
+for file in "$DIR"/*; do
+  if [ -f "$file" ]; then
+    file_type=$(file "$file")
 
-tail -f affiche en temps réel les dernières lignes d'un fichier. Souvent utilisée pour surveiller des fichiers de log, car elle continue d'afficher les nouvelles lignes ajoutées au fichier au fur et à mesure qu'elles sont écrites
+    if [[ $file_type == *"text"* ]]; then
+      echo -n "Voulez-vous visualiser le fichier $file ? (oui/non) : "
+      read response
 
-En se connectant à la VM depuis un autre terminal, affichage de la connexion dans le journal : 
+      if [ "$response" == "oui" ]; then
+        more "$file"
+      fi
+    fi
+  fi
+done
+```
 
-Oct 15 22:39:21 serveur1 sshd[729]: Accepted publickey for root from 172.16.233.1 port 61849 ssh2: ED25519 SHA256:Zk1jY8AoCwjdlBeKw30lkRpFSH0EDeC7M27ZqgjrR1I
-Oct 15 22:39:21 serveur1 sshd[729]: pam_unix(sshd:session): session opened for user root(uid=0) by (uid=0)
-Oct 15 22:39:21 serveur1 systemd-logind[541]: New session 5 of user root.
-Oct 15 22:39:21 serveur1 systemd[1]: Started session-5.scope - Session 5 of User root.
-Oct 15 22:39:21 serveur1 sshd[729]: pam_env(sshd:session): deprecated reading of user environment enabled
+### Resultat :
 
- /etc/logrotate.conf est un fichier de configuration utilisé par le service logrotate, qui gère la rotation, la compression, la suppression et l'envoi par email des fichiers journaux sur linux
+```
+root@serveur1:~# ./voirtextefichier.sh ~
+Voulez-vous visualiser le fichier /root/analyse.sh ? (oui/non) : oui
+#!/bin/bash
 
-## dmesg
+echo "Bonjour, vous rentré $# paramètres"
 
-La commande dmesg affiche que le cpu de ma machine est de type ARM (Macbook M2)
+echo "Le nom du script est $0"
 
-Le modèle de carte réseaux détecté est le suivant : Intel(R) PRO/1000 Network Driver
+if [ $# -ge 3 ]; then
+  echo "Le 3eme paramètre est $3"
+else
+  echo "Le 3eme paramètre n'a pas été fourni"
+fi
+
+echo "Voici la liste des paramètres : $@"
+```
+
+## Appreciation
+
+### Script :
+
+```
+#!/bin/bash
+
+while true; do
+  echo -n "entrez une note (ou appuyez sur 'q' pour quitter) : "
+  read input
+
+  if [ "$input" == "q" ]; then
+    echo "Programme terminé"
+    break
+  fi
+
+  # Vérification si l'entrée est un nombre valide
+  if ! [[ "$input" =~ ^[0-9]+$ ]]; then
+    echo "Veuillez entrer un nombre valide"
+    continue
+  fi
+
+  note=$input
+
+  if [ "$note" -ge 16 ] && [ "$note" -le 20 ]; then
+    echo "Très bien"
+  elif [ "$note" -ge 14 ] && [ "$note" -lt 16 ]; then
+    echo "Bien"
+  elif [ "$note" -ge 12 ] && [ "$note" -lt 14 ]; then
+    echo "Assez bien"
+  elif [ "$note" -ge 10 ] && [ "$note" -lt 12 ]; then
+    echo "Moyen"
+  elif [ "$note" -lt 10 ]; then
+    echo "Insuffisant"
+  else
+    echo "Note hors des limites (0-20)"
+  fi
+done
+```
+
+### Resultat :
+
+```
+root@serveur1:~# ./appreciation.sh
+entrez une note (ou appuyez sur 'q' pour quitter) : q
+Programme terminé
+root@serveur1:~# ./appreciation.sh
+entrez une note (ou appuyez sur 'q' pour quitter) : 12
+Assez bien
+entrez une note (ou appuyez sur 'q' pour quitter) : 17
+Très bien
+```
